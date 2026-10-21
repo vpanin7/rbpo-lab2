@@ -1,0 +1,82 @@
+@base = http://localhost:8080
+
+### Создать пользователя (201)
+POST {{base}}/api/users
+Content-Type: application/json
+
+{"name":"Житель","email":"resident@example.com"}
+
+### Создать помещение (201)
+POST {{base}}/api/premises
+Content-Type: application/json
+
+{"address":"ул. Лесная, д. 5, кв. 12","area":52.5,"ownerId":1}
+
+### Создать счётчик (201)
+POST {{base}}/api/meters
+Content-Type: application/json
+
+{"premiseId":1,"resourceType":"COLD_WATER","serialNumber":"CW-001","tariff":45.50,"status":"ACTIVE"}
+
+### Начальное показание (201)
+POST {{base}}/api/meter-readings
+Content-Type: application/json
+
+{"meterId":1,"period":"2026-08","value":100,"status":"VERIFIED"}
+
+### Следующее показание (201)
+POST {{base}}/api/meter-readings
+Content-Type: application/json
+
+{"meterId":1,"period":"2026-09","value":115,"status":"VERIFIED"}
+
+### Рассчитать начисление: volume=15, amount=682.50 (201)
+POST {{base}}/api/utility-charges
+Content-Type: application/json
+
+{"meterId":1,"period":"2026-09"}
+
+### Прочитать начисление (200)
+GET {{base}}/api/utility-charges/1
+
+### Отметить оплату (200)
+PATCH {{base}}/api/utility-charges/1
+Content-Type: application/json
+
+{"status":"PAID"}
+
+### Список пользователей (200)
+GET {{base}}/api/users
+
+### Список помещений (200)
+GET {{base}}/api/premises
+
+### Список счётчиков (200)
+GET {{base}}/api/meters
+
+### Список показаний (200)
+GET {{base}}/api/meter-readings
+
+### Список начислений (200)
+GET {{base}}/api/utility-charges
+
+### Удаление занятого счётчика: ожидается 409
+DELETE {{base}}/api/meters/1
+
+### Удалить начисление (204)
+DELETE {{base}}/api/utility-charges/1
+
+### Удалить показания (204)
+DELETE {{base}}/api/meter-readings/2
+
+###
+DELETE {{base}}/api/meter-readings/1
+
+### Удалить счётчик (204)
+DELETE {{base}}/api/meters/1
+
+### Удалить помещение (204)
+DELETE {{base}}/api/premises/1
+
+### Удалить пользователя (204)
+DELETE {{base}}/api/users/1

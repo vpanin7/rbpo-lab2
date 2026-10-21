@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: "1БКС24054"
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
