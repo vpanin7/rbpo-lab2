@@ -1,82 +1,220 @@
 @base = http://localhost:8080
+# Замените period на предыдущий завершённый месяц при запуске.
+@period = 2026-09
 
-### Создать пользователя (201)
+### Проверить показание воды
+POST {{base}}/api/operations/meter-readings/2/verify
+
+### Повторная проверка запрещена
+POST {{base}}/api/operations/meter-readings/2/verify
+
+### Неполные показания: всё начисление откатывается
+POST {{base}}/api/operations/premises/1/bill
+Content-Type: application/json
+
+{"period": "{{period}}"}
+
+### После отката начислений нет
+GET {{base}}/api/utility-charges
+
+### Проверить показание электричества
+POST {{base}}/api/operations/meter-readings/4/verify
+
+### Начислить за помещение
+POST {{base}}/api/operations/premises/1/bill
+Content-Type: application/json
+
+{"period": "{{period}}"}
+
+### Повторное начисление запрещено
+POST {{base}}/api/operations/premises/1/bill
+Content-Type: application/json
+
+{"period": "{{period}}"}
+
+### Перенос долга новому владельцу запрещён
+POST {{base}}/api/operations/premises/1/transfer
+Content-Type: application/json
+
+{"newOwnerId": 2}
+
+### Неверная сумма оплаты
+POST {{base}}/api/operations/premises/1/pay
+Content-Type: application/json
+
+{"period": "{{period}}", "ownerId": 1, "amount": 1}
+
+### Оплата чужим владельцем запрещена
+POST {{base}}/api/operations/premises/1/pay
+Content-Type: application/json
+
+{"period": "{{period}}", "ownerId": 2, "amount": 862.5}
+
+### Оплатить весь месяц
+POST {{base}}/api/operations/premises/1/pay
+Content-Type: application/json
+
+{"period": "{{period}}", "ownerId": 1, "amount": 862.5}
+
+### Повторная оплата запрещена
+POST {{base}}/api/operations/premises/1/pay
+Content-Type: application/json
+
+{"period": "{{period}}", "ownerId": 1, "amount": 862.5}
+
+### Передать помещение без долга
+POST {{base}}/api/operations/premises/1/transfer
+Content-Type: application/json
+
+{"newOwnerId": 2}
+
+### Неуспешная замена: номер занят, отключение откатывается
+POST {{base}}/api/operations/meters/1/replace
+Content-Type: application/json
+
+{"serialNumber": "DEMO-EL-1", "tariff": 50}
+
+### Старый счётчик остался активен
+GET {{base}}/api/meters/1
+
+### Заменить счётчик
+POST {{base}}/api/operations/meters/1/replace
+Content-Type: application/json
+
+{"serialNumber": "NEW-CW-1", "tariff": 50}
+
+### Повторная замена отключённого счётчика запрещена
+POST {{base}}/api/operations/meters/1/replace
+Content-Type: application/json
+
+{"serialNumber": "NEW-CW-2", "tariff": 50}
+
+### Создать users
 POST {{base}}/api/users
 Content-Type: application/json
 
-{"name":"Житель","email":"resident@example.com"}
+{"name": "Тест", "email": "crud@example.com"}
 
-### Создать помещение (201)
+> {% client.global.set("userId", response.body.id); %}
+
+### Список users
+GET {{base}}/api/users
+
+### По id users
+GET {{base}}/api/users/{{userId}}
+
+### Изменить users
+PATCH {{base}}/api/users/{{userId}}
+Content-Type: application/json
+
+{"name": "Другой"}
+
+### Создать premises
 POST {{base}}/api/premises
 Content-Type: application/json
 
-{"address":"ул. Лесная, д. 5, кв. 12","area":52.5,"ownerId":1}
+{"address": "Тестовая, 1", "area": 30, "ownerId": "{{userId}}"}
 
-### Создать счётчик (201)
+> {% client.global.set("premiseId", response.body.id); %}
+
+### Список premises
+GET {{base}}/api/premises
+
+### По id premises
+GET {{base}}/api/premises/{{premiseId}}
+
+### Изменить premises
+PATCH {{base}}/api/premises/{{premiseId}}
+Content-Type: application/json
+
+{"area": 31}
+
+### Создать meters
 POST {{base}}/api/meters
 Content-Type: application/json
 
-{"premiseId":1,"resourceType":"COLD_WATER","serialNumber":"CW-001","tariff":45.50,"status":"ACTIVE"}
+{"premiseId": "{{premiseId}}", "resourceType": "GAS", "serialNumber": "CRUD-GAS", "tariff": 10}
 
-### Начальное показание (201)
+> {% client.global.set("meterId", response.body.id); %}
+
+### Список meters
+GET {{base}}/api/meters
+
+### По id meters
+GET {{base}}/api/meters/{{meterId}}
+
+### Изменить meters
+PATCH {{base}}/api/meters/{{meterId}}
+Content-Type: application/json
+
+{"tariff": 11}
+
+### Создать meter-readings
 POST {{base}}/api/meter-readings
 Content-Type: application/json
 
-{"meterId":1,"period":"2026-08","value":100,"status":"VERIFIED"}
+{"meterId": "{{meterId}}", "period": "{{period}}", "value": 5, "status": "VERIFIED"}
 
-### Следующее показание (201)
-POST {{base}}/api/meter-readings
+> {% client.global.set("readingId", response.body.id); %}
+
+### Список meter-readings
+GET {{base}}/api/meter-readings
+
+### По id meter-readings
+GET {{base}}/api/meter-readings/{{readingId}}
+
+### Изменить meter-readings
+PATCH {{base}}/api/meter-readings/{{readingId}}
 Content-Type: application/json
 
-{"meterId":1,"period":"2026-09","value":115,"status":"VERIFIED"}
+{"value": 6}
 
-### Рассчитать начисление: volume=15, amount=682.50 (201)
+### Создать utility-charges
 POST {{base}}/api/utility-charges
 Content-Type: application/json
 
-{"meterId":1,"period":"2026-09"}
+{"meterId": "{{meterId}}", "period": "{{period}}"}
 
-### Прочитать начисление (200)
-GET {{base}}/api/utility-charges/1
+> {% client.global.set("chargeId", response.body.id); %}
 
-### Отметить оплату (200)
-PATCH {{base}}/api/utility-charges/1
-Content-Type: application/json
-
-{"status":"PAID"}
-
-### Список пользователей (200)
-GET {{base}}/api/users
-
-### Список помещений (200)
-GET {{base}}/api/premises
-
-### Список счётчиков (200)
-GET {{base}}/api/meters
-
-### Список показаний (200)
-GET {{base}}/api/meter-readings
-
-### Список начислений (200)
+### Список utility-charges
 GET {{base}}/api/utility-charges
 
-### Удаление занятого счётчика: ожидается 409
-DELETE {{base}}/api/meters/1
+### По id utility-charges
+GET {{base}}/api/utility-charges/{{chargeId}}
 
-### Удалить начисление (204)
-DELETE {{base}}/api/utility-charges/1
+### Изменить utility-charges
+PATCH {{base}}/api/utility-charges/{{chargeId}}
+Content-Type: application/json
 
-### Удалить показания (204)
-DELETE {{base}}/api/meter-readings/2
+{}
 
-###
-DELETE {{base}}/api/meter-readings/1
+### Удалить utility-charges
+DELETE {{base}}/api/utility-charges/{{chargeId}}
 
-### Удалить счётчик (204)
-DELETE {{base}}/api/meters/1
+### Удалённый объект utility-charges
+GET {{base}}/api/utility-charges/{{chargeId}}
 
-### Удалить помещение (204)
-DELETE {{base}}/api/premises/1
+### Удалить meter-readings
+DELETE {{base}}/api/meter-readings/{{readingId}}
 
-### Удалить пользователя (204)
-DELETE {{base}}/api/users/1
+### Удалённый объект meter-readings
+GET {{base}}/api/meter-readings/{{readingId}}
+
+### Удалить meters
+DELETE {{base}}/api/meters/{{meterId}}
+
+### Удалённый объект meters
+GET {{base}}/api/meters/{{meterId}}
+
+### Удалить premises
+DELETE {{base}}/api/premises/{{premiseId}}
+
+### Удалённый объект premises
+GET {{base}}/api/premises/{{premiseId}}
+
+### Удалить users
+DELETE {{base}}/api/users/{{userId}}
+
+### Удалённый объект users
+GET {{base}}/api/users/{{userId}}
