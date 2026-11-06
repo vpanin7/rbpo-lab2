@@ -3,11 +3,13 @@ package ru.student.lab3.controller;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 import ru.student.lab3.dto.UtilityChargeDto;
 import ru.student.lab3.model.UtilityCharge;
 import ru.student.lab3.service.UtilityChargeService;
 
 @RestController
+@PreAuthorize("hasRole('ADMIN')")
 @RequestMapping("/api/utility-charges")
 public class UtilityChargeController {
     private final UtilityChargeService service;

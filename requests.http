@@ -1,220 +1,425 @@
 @base = http://localhost:8080
-# Замените period на предыдущий завершённый месяц при запуске.
-@period = 2026-09
+@period = 2026-10
 
-### Проверить показание воды
-POST {{base}}/api/operations/meter-readings/2/verify
+# Укажи предыдущий месяц и выбери окружение local. Запросы запускать сверху вниз.
 
-### Повторная проверка запрещена
-POST {{base}}/api/operations/meter-readings/2/verify
+# 0. Вход, регистрация и права
 
-### Неполные показания: всё начисление откатывается
-POST {{base}}/api/operations/premises/1/bill
+### Получить CSRF-токен и cookie — 200
+GET {{base}}/api/csrf
+
+> {% client.global.set("csrf", response.body.token); %}
+
+### Без Basic Auth — 401
+GET {{base}}/api/auth/me
+
+### Неверный пароль — 401
+GET {{base}}/api/auth/me
+Authorization: Basic admin@example.com wrong
+
+### Вход администратора — 200
+GET {{base}}/api/auth/me
+Authorization: Basic admin@example.com {{adminPassword}}
+
+### Регистрация без CSRF — 403
+POST {{base}}/api/auth/register
 Content-Type: application/json
+
+{"name": "Тест регистрации", "email": "security-test@example.com", "password": "{{signupPassword}}"}
+
+### Защищённая операция без CSRF — 403
+POST {{base}}/api/operations/meter-readings/2/verify
+Authorization: Basic admin@example.com {{adminPassword}}
+
+### С CSRF, но без входа — 401
+POST {{base}}/api/operations/meter-readings/2/verify
+X-CSRF-TOKEN: {{csrf}}
+
+### Слабый пароль — 400
+POST {{base}}/api/auth/register
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
+
+{"name": "Тест регистрации", "email": "security-test@example.com", "password": "123"}
+
+### Попытка присвоить себе роль — 400
+POST {{base}}/api/auth/register
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
+
+{"name": "Тест регистрации", "email": "security-test@example.com", "password": "{{signupPassword}}", "role": "ADMIN"}
+
+### Регистрация жителя — 201
+POST {{base}}/api/auth/register
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
+
+{"name": "Тест регистрации", "email": "security-test@example.com", "password": "{{signupPassword}}"}
+
+> {% client.global.set("signupId", response.body.id); %}
+
+### Повторный email в другом регистре — 409
+POST {{base}}/api/auth/register
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
+
+{"name": "Тест регистрации", "email": "SECURITY-TEST@EXAMPLE.COM", "password": "{{signupPassword}}"}
+
+### Вход нового жителя — 200
+GET {{base}}/api/auth/me
+Authorization: Basic security-test@example.com {{signupPassword}}
+
+### Житель не может смотреть список пользователей — 403
+GET {{base}}/api/users
+Authorization: Basic security-test@example.com {{signupPassword}}
+
+### Житель не может подтверждать показания — 403
+POST {{base}}/api/operations/meter-readings/2/verify
+Authorization: Basic resident1@example.com {{residentPassword}}
+X-CSRF-TOKEN: {{csrf}}
+
+### Житель видит своё помещение — 200
+GET {{base}}/api/premises/1
+Authorization: Basic resident1@example.com {{residentPassword}}
+
+### Чужое помещение недоступно — 403
+GET {{base}}/api/premises/1
+Authorization: Basic resident2@example.com {{residentPassword}}
+
+### Отключить нового жителя — 204
+PATCH {{base}}/api/users/{{signupId}}/account
+Authorization: Basic admin@example.com {{adminPassword}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
+
+{"enabled": false}
+
+### Вход отключённого жителя — 401
+GET {{base}}/api/auth/me
+Authorization: Basic security-test@example.com {{signupPassword}}
+
+### Включить нового жителя — 204
+PATCH {{base}}/api/users/{{signupId}}/account
+Authorization: Basic admin@example.com {{adminPassword}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
+
+{"enabled": true}
+
+### Вход после включения — 200
+GET {{base}}/api/auth/me
+Authorization: Basic security-test@example.com {{signupPassword}}
+
+# 1. Бизнес-сценарий и ошибки
+
+### Проверить показание воды — 200
+POST {{base}}/api/operations/meter-readings/2/verify
+Authorization: Basic admin@example.com {{adminPassword}}
+X-CSRF-TOKEN: {{csrf}}
+
+### Повторная проверка запрещена — 409
+POST {{base}}/api/operations/meter-readings/2/verify
+Authorization: Basic admin@example.com {{adminPassword}}
+X-CSRF-TOKEN: {{csrf}}
+
+### Неполные показания: всё начисление откатывается — 400
+POST {{base}}/api/operations/premises/1/bill
+Authorization: Basic admin@example.com {{adminPassword}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"period": "{{period}}"}
 
-### После отката начислений нет
+### После отката начислений нет — 200
 GET {{base}}/api/utility-charges
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### Проверить показание электричества
+### Проверить показание электричества — 200
 POST {{base}}/api/operations/meter-readings/4/verify
+Authorization: Basic admin@example.com {{adminPassword}}
+X-CSRF-TOKEN: {{csrf}}
 
-### Начислить за помещение
+### Начислить за помещение — 200
 POST {{base}}/api/operations/premises/1/bill
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"period": "{{period}}"}
 
-### Повторное начисление запрещено
+### Повторное начисление запрещено — 409
 POST {{base}}/api/operations/premises/1/bill
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"period": "{{period}}"}
 
-### Перенос долга новому владельцу запрещён
+### Перенос долга новому владельцу запрещён — 409
 POST {{base}}/api/operations/premises/1/transfer
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"newOwnerId": 2}
 
-### Неверная сумма оплаты
+### Подмена ownerId в JSON отклоняется — 400
 POST {{base}}/api/operations/premises/1/pay
+Authorization: Basic resident2@example.com {{residentPassword}}
 Content-Type: application/json
-
-{"period": "{{period}}", "ownerId": 1, "amount": 1}
-
-### Оплата чужим владельцем запрещена
-POST {{base}}/api/operations/premises/1/pay
-Content-Type: application/json
-
-{"period": "{{period}}", "ownerId": 2, "amount": 862.5}
-
-### Оплатить весь месяц
-POST {{base}}/api/operations/premises/1/pay
-Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"period": "{{period}}", "ownerId": 1, "amount": 862.5}
 
-### Повторная оплата запрещена
+### Неверная сумма оплаты — 400
 POST {{base}}/api/operations/premises/1/pay
+Authorization: Basic resident1@example.com {{residentPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
-{"period": "{{period}}", "ownerId": 1, "amount": 862.5}
+{"period": "{{period}}", "amount": 1}
 
-### Передать помещение без долга
+### Чужое помещение оплатить нельзя — 403
+POST {{base}}/api/operations/premises/1/pay
+Authorization: Basic resident2@example.com {{residentPassword}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
+
+{"period": "{{period}}", "amount": 862.5}
+
+### Оплатить весь месяц — 200
+POST {{base}}/api/operations/premises/1/pay
+Authorization: Basic resident1@example.com {{residentPassword}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
+
+{"period": "{{period}}", "amount": 862.5}
+
+### Повторная оплата запрещена — 409
+POST {{base}}/api/operations/premises/1/pay
+Authorization: Basic resident1@example.com {{residentPassword}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
+
+{"period": "{{period}}", "amount": 862.5}
+
+### Передать помещение без долга — 200
 POST {{base}}/api/operations/premises/1/transfer
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"newOwnerId": 2}
 
-### Неуспешная замена: номер занят, отключение откатывается
+### Неуспешная замена: номер занят, отключение откатывается — 409
 POST {{base}}/api/operations/meters/1/replace
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"serialNumber": "DEMO-EL-1", "tariff": 50}
 
-### Старый счётчик остался активен
+### Старый счётчик остался активен — 200
 GET {{base}}/api/meters/1
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### Заменить счётчик
+### Заменить счётчик — 200
 POST {{base}}/api/operations/meters/1/replace
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"serialNumber": "NEW-CW-1", "tariff": 50}
 
-### Повторная замена отключённого счётчика запрещена
+### Повторная замена отключённого счётчика запрещена — 409
 POST {{base}}/api/operations/meters/1/replace
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"serialNumber": "NEW-CW-2", "tariff": 50}
 
-### Создать users
+### Старый владелец потерял доступ — 403
+GET {{base}}/api/premises/1
+Authorization: Basic resident1@example.com {{residentPassword}}
+
+### Новый владелец получил доступ — 200
+GET {{base}}/api/premises/1
+Authorization: Basic resident2@example.com {{residentPassword}}
+
+# 2. CRUD всех сущностей
+
+### Создать users — 201
 POST {{base}}/api/users
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"name": "Тест", "email": "crud@example.com"}
 
 > {% client.global.set("userId", response.body.id); %}
 
-### Список users
+### Список users — 200
 GET {{base}}/api/users
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### По id users
+### По id users — 200
 GET {{base}}/api/users/{{userId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### Изменить users
+### Изменить users — 200
 PATCH {{base}}/api/users/{{userId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"name": "Другой"}
 
-### Создать premises
+### Создать premises — 201
 POST {{base}}/api/premises
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"address": "Тестовая, 1", "area": 30, "ownerId": "{{userId}}"}
 
 > {% client.global.set("premiseId", response.body.id); %}
 
-### Список premises
+### Список premises — 200
 GET {{base}}/api/premises
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### По id premises
+### По id premises — 200
 GET {{base}}/api/premises/{{premiseId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### Изменить premises
+### Изменить premises — 200
 PATCH {{base}}/api/premises/{{premiseId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"area": 31}
 
-### Создать meters
+### Создать meters — 201
 POST {{base}}/api/meters
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"premiseId": "{{premiseId}}", "resourceType": "GAS", "serialNumber": "CRUD-GAS", "tariff": 10}
 
 > {% client.global.set("meterId", response.body.id); %}
 
-### Список meters
+### Список meters — 200
 GET {{base}}/api/meters
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### По id meters
+### По id meters — 200
 GET {{base}}/api/meters/{{meterId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### Изменить meters
+### Изменить meters — 200
 PATCH {{base}}/api/meters/{{meterId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"tariff": 11}
 
-### Создать meter-readings
+### Создать meter-readings — 201
 POST {{base}}/api/meter-readings
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"meterId": "{{meterId}}", "period": "{{period}}", "value": 5, "status": "VERIFIED"}
 
 > {% client.global.set("readingId", response.body.id); %}
 
-### Список meter-readings
+### Список meter-readings — 200
 GET {{base}}/api/meter-readings
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### По id meter-readings
+### По id meter-readings — 200
 GET {{base}}/api/meter-readings/{{readingId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### Изменить meter-readings
+### Изменить meter-readings — 200
 PATCH {{base}}/api/meter-readings/{{readingId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"value": 6}
 
-### Создать utility-charges
+### Создать utility-charges — 201
 POST {{base}}/api/utility-charges
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {"meterId": "{{meterId}}", "period": "{{period}}"}
 
 > {% client.global.set("chargeId", response.body.id); %}
 
-### Список utility-charges
+### Список utility-charges — 200
 GET {{base}}/api/utility-charges
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### По id utility-charges
+### По id utility-charges — 200
 GET {{base}}/api/utility-charges/{{chargeId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### Изменить utility-charges
+### Изменить utility-charges — 200
 PATCH {{base}}/api/utility-charges/{{chargeId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 Content-Type: application/json
+X-CSRF-TOKEN: {{csrf}}
 
 {}
 
-### Удалить utility-charges
+### Удалить utility-charges — 204
 DELETE {{base}}/api/utility-charges/{{chargeId}}
+Authorization: Basic admin@example.com {{adminPassword}}
+X-CSRF-TOKEN: {{csrf}}
 
-### Удалённый объект utility-charges
+### Удалённый объект utility-charges — 404
 GET {{base}}/api/utility-charges/{{chargeId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### Удалить meter-readings
+### Удалить meter-readings — 204
 DELETE {{base}}/api/meter-readings/{{readingId}}
+Authorization: Basic admin@example.com {{adminPassword}}
+X-CSRF-TOKEN: {{csrf}}
 
-### Удалённый объект meter-readings
+### Удалённый объект meter-readings — 404
 GET {{base}}/api/meter-readings/{{readingId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### Удалить meters
+### Удалить meters — 204
 DELETE {{base}}/api/meters/{{meterId}}
+Authorization: Basic admin@example.com {{adminPassword}}
+X-CSRF-TOKEN: {{csrf}}
 
-### Удалённый объект meters
+### Удалённый объект meters — 404
 GET {{base}}/api/meters/{{meterId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### Удалить premises
+### Удалить premises — 204
 DELETE {{base}}/api/premises/{{premiseId}}
+Authorization: Basic admin@example.com {{adminPassword}}
+X-CSRF-TOKEN: {{csrf}}
 
-### Удалённый объект premises
+### Удалённый объект premises — 404
 GET {{base}}/api/premises/{{premiseId}}
+Authorization: Basic admin@example.com {{adminPassword}}
 
-### Удалить users
+### Удалить users — 204
 DELETE {{base}}/api/users/{{userId}}
+Authorization: Basic admin@example.com {{adminPassword}}
+X-CSRF-TOKEN: {{csrf}}
 
-### Удалённый объект users
+### Удалённый объект users — 404
 GET {{base}}/api/users/{{userId}}
+Authorization: Basic admin@example.com {{adminPassword}}

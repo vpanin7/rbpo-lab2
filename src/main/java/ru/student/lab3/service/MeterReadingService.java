@@ -5,24 +5,25 @@ import java.time.YearMonth;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import ru.student.lab3.dto.MeterReadingDto;
 import ru.student.lab3.model.*;
 import ru.student.lab3.repository.*;
 import ru.student.lab3.exception.ApiException;
 
 @Service
-@Transactional
+// При ошибке все изменения операции откатываются.
+// SERIALIZABLE не даёт параллельным запросам провести противоречивые изменения.
+@Transactional(isolation = Isolation.SERIALIZABLE)
 public class MeterReadingService {
     private final MeterReadingRepository meterReadingRepository;
     private final MeterRepository meterRepository;
     private final UtilityChargeRepository utilityChargeRepository;
-    private final WriteLock lock;
 
-    public MeterReadingService(MeterReadingRepository meterReadingRepository, MeterRepository meterRepository, UtilityChargeRepository utilityChargeRepository, WriteLock lock) {
+    public MeterReadingService(MeterReadingRepository meterReadingRepository, MeterRepository meterRepository, UtilityChargeRepository utilityChargeRepository) {
         this.meterReadingRepository = meterReadingRepository;
         this.meterRepository = meterRepository;
         this.utilityChargeRepository = utilityChargeRepository;
-        this.lock = lock;
     }
 
     public List<MeterReading> getAll() { return meterReadingRepository.findAll(); }
@@ -31,29 +32,20 @@ public class MeterReadingService {
     }
 
     public MeterReading create(MeterReadingDto.Request request) {
-        {
-            lock.acquire();
             return save(new MeterReading(meterReadingRepository.nextId(), request.meterId(), request.period(), request.value(), request.status(), Instant.now()));
-        }
     }
 
     public MeterReading update(Long id, MeterReadingDto.Request request) {
-        {
-            lock.acquire();
             MeterReading old = getById(id);
-            return save(new MeterReading(id, Checks.choose(request.meterId(), old.meterId()), Checks.choose(request.period(), old.period()), Checks.choose(request.value(), old.value()), Checks.choose(request.status(), old.status()), old.createdAt()));
-        }
+        return save(new MeterReading(id, Checks.choose(request.meterId(), old.meterId()), Checks.choose(request.period(), old.period()), Checks.choose(request.value(), old.value()), Checks.choose(request.status(), old.status()), old.createdAt()));
     }
 
     public void delete(Long id) {
-        {
-            lock.acquire();
             MeterReading old = getById(id);
-            if (utilityChargeRepository.findAll().stream().anyMatch(c -> c.meterId().equals(old.meterId()))) {
-                throw ApiException.conflict("Сначала удалите связанные объекты");
-            }
-            meterReadingRepository.deleteById(id);
+        if (utilityChargeRepository.findAll().stream().anyMatch(c -> c.meterId().equals(old.meterId()))) {
+            throw ApiException.conflict("Сначала удалите связанные объекты");
         }
+        meterReadingRepository.deleteById(id);
     }
 
     private MeterReading save(MeterReading item) {

@@ -1,106 +1,67 @@
-# Лабораторная работа №3
+# Лабораторная работа №4 — учёт коммунальных ресурсов
 
-Учёт коммунальных ресурсов, вариант 20.
-Продолжение второй лабораторной работы: данные хранятся в PostgreSQL.
+Вариант 20. Продолжение лабораторной №3: Java 17, Spring Boot, Maven, Spring JDBC и PostgreSQL 16.
 
-## Технологии
+## Доступ к API
 
-Java 17, Spring Boot 3.5.5, Maven, Spring JDBC, PostgreSQL 16.
+| Кто | Что может делать |
+| --- | --- |
+| Без входа | Получить CSRF-токен и зарегистрироваться |
+| Житель (`RESIDENT`) | Посмотреть свой профиль, открыть своё помещение по ID и оплатить его начисления |
+| Администратор (`ADMIN`) | Выполнять CRUD для всех пяти сущностей, подтверждать показания, начислять плату, передавать помещения, заменять счётчики и включать или отключать аккаунты жителей |
 
-## Сущности и связи
+Вход — HTTP Basic, логин — email. Пароль хранится в PostgreSQL только в виде BCrypt-хеша. Публичная регистрация всегда выдаёт роль жителя. У администратора есть `PATCH /api/users/{id}/account` с телом `{"enabled": false}` или `{"enabled": true}`. Отключённый аккаунт не может войти.
 
-- Пользователь — владелец помещений.
-- Помещение — адрес, площадь и ссылка на владельца.
-- Счётчик — относится к помещению, хранит тип ресурса, тариф и статус.
-- Показание — относится к счётчику, содержит месяц, значение и статус проверки.
-- Начисление — связано с помещением, счётчиком и периодом, содержит расход, сумму и статус оплаты.
+При оплате идентификатор жителя берётся из Basic Auth, а текущий владелец проверяется внутри транзакции. В запросе оплаты нужны только `period` и `amount`. После передачи помещения старый владелец теряет доступ.
 
-В базе используются внешние ключи, ограничения уникальности и проверки допустимых значений.
+## Подготовка PostgreSQL
 
-## Бизнес-операции
+Для демонстрации создай в pgAdmin отдельную базу `utilities_lab4` с владельцем `postgres`. Так данные предыдущей лабы останутся доступны, а сценарий начнётся с чистых данных. Docker не требуется.
 
-1. Проверка показания счётчика.
-2. Расчёт начислений за месяц по помещению.
-3. Оплата всех начислений помещения за месяц.
-4. Передача помещения другому владельцу после погашения задолженности.
-5. Замена счётчика с отключением старого и созданием начального показания нового.
+1. Если роль БД `utilities_app` уже создана в лабе №3, используй её пароль. Если роли ещё нет, выполни от имени `postgres` (замени `YOUR_DB_PASSWORD` своим паролем):
 
-Операции выполняются в транзакциях. Если возникает ошибка, изменения откатываются.
-Повторные начисления и оплаты запрещены.
+   ```sql
+   CREATE ROLE utilities_app LOGIN PASSWORD 'YOUR_DB_PASSWORD'
+       NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+   ```
 
-## Подготовка базы данных
+2. В Query Tool **базы `utilities_lab4`** выполни файлы в таком порядке: [schema.sql](db/schema.sql), [seed.sql](db/seed.sql), [security.sql](db/security.sql).
+3. В той же базе выдай права на таблицы и последовательности:
 
-Установить PostgreSQL 16. В pgAdmin создать базу `utilities` с владельцем `postgres`.
+   ```sql
+   GRANT CONNECT ON DATABASE utilities_lab4 TO utilities_app;
+   GRANT USAGE ON SCHEMA public TO utilities_app;
+   REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+   GRANT SELECT, INSERT, UPDATE, DELETE
+       ON app_users, premises, meters, meter_readings, utility_charges TO utilities_app;
+   GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO utilities_app;
+   ```
 
-Открыть Query Tool для базы `utilities` под пользователем `postgres` и выполнить:
+`security.sql` добавляет таблицу аккаунтов и выдаёт права на неё. Если нужно подключить существующую базу третьей лабы, выполни в ней только `security.sql` и укажи эту базу в `DB_URL`. Сценарий запросов рассчитан на свежие демонстрационные данные.
 
-```sql
-CREATE ROLE utilities_app
-    LOGIN
-    PASSWORD 'YOUR_PASSWORD'
-    NOSUPERUSER
-    NOCREATEDB
-    NOCREATEROLE
-    NOREPLICATION;
+## Запуск на Windows
 
-GRANT CONNECT ON DATABASE utilities TO utilities_app;
-GRANT USAGE ON SCHEMA public TO utilities_app;
-REVOKE CREATE ON SCHEMA public FROM PUBLIC;
-```
-
-Вместо `YOUR_PASSWORD` указать свой пароль.
-
-Затем выполнить по порядку:
-
-1. `db/schema.sql` — создание таблиц и ограничений.
-2. `db/seed.sql` — добавление начальных данных.
-
-После этого выдать права пользователю приложения:
-
-```sql
-GRANT SELECT, INSERT, UPDATE, DELETE
-ON ALL TABLES IN SCHEMA public TO utilities_app;
-
-GRANT USAGE, SELECT
-ON ALL SEQUENCES IN SCHEMA public TO utilities_app;
-```
-
-Подготовка базы выполняется один раз. Приложение подключается через пользователя `utilities_app`, которому разрешена работа с данными, но не создание таблиц.
-
-## Запуск
-
-Открыть проект в IntelliJ IDEA. В терминале PowerShell из папки с `pom.xml` выполнить:
+В PowerShell из папки с `pom.xml`:
 
 ```powershell
-$env:DB_URL="jdbc:postgresql://localhost:5432/utilities"
-$env:DB_USER="utilities_app"
-$env:DB_PASSWORD="YOUR_PASSWORD"
+$env:DB_URL='jdbc:postgresql://localhost:5432/utilities_lab4'
+$env:DB_USER='utilities_app'
+$env:DB_PASSWORD='YOUR_DB_PASSWORD'
+$env:SPRING_PROFILES_ACTIVE='demo'
+$env:DEMO_ADMIN_PASSWORD='YOUR_ADMIN_PASSWORD'
+$env:DEMO_RESIDENT_PASSWORD='YOUR_RESIDENT_PASSWORD'
 .\mvnw.cmd spring-boot:run
 ```
 
-В `DB_PASSWORD` указать пароль, заданный для `utilities_app`.
+Замени три заглушки своими паролями. Для аккаунтов API пароль должен содержать минимум 12 символов, заглавную и строчную латинские буквы, цифру и спецсимвол; максимум 72 байта UTF-8. Пароль БД и пароли для входа в API — разные настройки.
 
-Параметры подключения передаются через переменные окружения.
-Приложение запускается на порту `8080`.
+Профиль `demo` добавляет аккаунты для `admin@example.com`, `resident1@example.com` и `resident2@example.com`. У двух демонстрационных жителей общий пароль. Повторный запуск не сбрасывает пароли и состояния уже созданных аккаунтов.
 
 ## Проверка
 
-Пример GET-запроса:
+- **Postman:** импортируй [коллекцию](postman/utilities.postman_collection.json). Заполни `adminPassword`, `residentPassword`, `signupPassword` в локальных значениях переменных. Первые два пароля возьми из запуска, третий придумай для нового жителя. Оставь cookie jar включённым. Запусти коллекцию сверху вниз на свежей базе.
+- **IntelliJ IDEA:** скопируй `http-client.private.env.example.json` в `http-client.private.env.json` и подставь те же три пароля. В [requests.http](requests.http) выбери окружение `local` и укажи предыдущий завершённый месяц в `period`. Запускай запросы сверху вниз.
 
-```text
-http://localhost:8080/api/users
-```
+Первый запрос `GET /api/csrf` возвращает имя заголовка и токен. Клиент сохраняет cookie сессии и передаёт токен в `X-CSRF-TOKEN` для POST, PATCH и DELETE. Basic Auth отправляется отдельно в каждом защищённом запросе.
 
-Основные адреса CRUD:
-
-- `/api/users`
-- `/api/premises`
-- `/api/meters`
-- `/api/meter-readings`
-- `/api/utility-charges`
-
-Запросы для проверки CRUD и бизнес-операций находятся в `requests.http` и коллекции в папке `postman`.
-
-В `requests.http` переменная `period` должна содержать предыдущий завершённый месяц в формате `YYYY-MM`.
-
-Сценарий бизнес-операций выполняется сверху вниз на начальных данных. Он изменяет состояние базы, поэтому при повторном запуске ответы могут отличаться.
+Ожидаемые отказы: `401` — не удалось войти; `403` — нет прав или токена CSRF; `400` и `409` — неверные данные или нарушение правил операции. Запрос без CSRF может получить `403` ещё до проверки логина. Запросы меняют базу, поэтому при повторном запуске сценария с теми же данными ответы могут отличаться.

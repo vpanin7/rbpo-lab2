@@ -3,11 +3,13 @@ package ru.student.lab3.controller;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 import ru.student.lab3.dto.MeterDto;
 import ru.student.lab3.model.Meter;
 import ru.student.lab3.service.MeterService;
 
 @RestController
+@PreAuthorize("hasRole('ADMIN')")
 @RequestMapping("/api/meters")
 public class MeterController {
     private final MeterService service;

@@ -16,6 +16,12 @@ public class ApiExceptionHandler {
                 "Нарушено ограничение БД: проверьте связи, уникальность и значения полей"));
     }
 
+    @ExceptionHandler(org.springframework.dao.ConcurrencyFailureException.class)
+    public ResponseEntity<ErrorResponse> concurrentChange(Exception ex) {
+        return ResponseEntity.status(409).body(new ErrorResponse(Instant.now(), 409,
+                "Данные одновременно изменились другим запросом. Повторите операцию"));
+    }
+
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> handle(ApiException ex) {
         return ResponseEntity.status(ex.getStatus()).body(

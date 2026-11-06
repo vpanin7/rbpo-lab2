@@ -3,11 +3,13 @@ package ru.student.lab3.controller;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 import ru.student.lab3.dto.UserDto;
 import ru.student.lab3.model.User;
 import ru.student.lab3.service.UserService;
 
 @RestController
+@PreAuthorize("hasRole('ADMIN')")
 @RequestMapping("/api/users")
 public class UserController {
     private final UserService service;

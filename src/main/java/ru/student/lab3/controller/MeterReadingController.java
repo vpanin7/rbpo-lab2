@@ -3,11 +3,13 @@ package ru.student.lab3.controller;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 import ru.student.lab3.dto.MeterReadingDto;
 import ru.student.lab3.model.MeterReading;
 import ru.student.lab3.service.MeterReadingService;
 
 @RestController
+@PreAuthorize("hasRole('ADMIN')")
 @RequestMapping("/api/meter-readings")
 public class MeterReadingController {
     private final MeterReadingService service;

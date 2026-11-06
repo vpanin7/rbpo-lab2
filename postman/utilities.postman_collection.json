@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "РБПО, лаба 3 — коммунальные ресурсы",
+    "name": "РБПО — лабораторная работа 4 (вариант 20)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Первая папка запускается на начальных данных один раз. Вторая создаёт отдельные записи и удаляет их."
+    "description": "Запускать сверху вниз на свежей базе с профилем demo. Задать adminPassword, residentPassword и signupPassword. Не отключать cookie jar."
   },
   "variable": [
     {
@@ -11,6 +11,22 @@
     },
     {
       "key": "period",
+      "value": ""
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "residentPassword",
+      "value": ""
+    },
+    {
+      "key": "signupPassword",
+      "value": ""
+    },
+    {
+      "key": "csrf",
       "value": ""
     }
   ],
@@ -28,14 +44,736 @@
   ],
   "item": [
     {
+      "name": "0. Вход, регистрация и права",
+      "item": [
+        {
+          "name": "Получить CSRF-токен и cookie",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/csrf"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"csrf\", pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Без Basic Auth",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Неверный пароль",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/auth/me",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "wrong",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Вход администратора",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/auth/me",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"ADMIN\", () => pm.expect(pm.response.json().role).to.eql(\"ADMIN\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Регистрация без CSRF",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Тест регистрации\", \"email\": \"security-test@example.com\", \"password\": \"{{signupPassword}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Защищённая операция без CSRF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base}}/api/operations/meter-readings/2/verify",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "С CSRF, но без входа",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/operations/meter-readings/2/verify"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Слабый пароль",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Тест регистрации\", \"email\": \"security-test@example.com\", \"password\": \"123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Попытка присвоить себе роль",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Тест регистрации\", \"email\": \"security-test@example.com\", \"password\": \"{{signupPassword}}\", \"role\": \"ADMIN\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Регистрация жителя",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Тест регистрации\", \"email\": \"security-test@example.com\", \"password\": \"{{signupPassword}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"signupId\", pm.response.json().id);",
+                  "pm.test(\"Без пароля и хеша\", () => pm.expect(Object.keys(pm.response.json())).to.have.members([\"id\", \"name\", \"email\", \"createdAt\"]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Повторный email в другом регистре",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Тест регистрации\", \"email\": \"SECURITY-TEST@EXAMPLE.COM\", \"password\": \"{{signupPassword}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Вход нового жителя",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/auth/me",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "security-test@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{signupPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"RESIDENT\", () => pm.expect(pm.response.json().role).to.eql(\"RESIDENT\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Житель не может смотреть список пользователей",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/users",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "security-test@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{signupPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Житель не может подтверждать показания",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/operations/meter-readings/2/verify",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "resident1@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{residentPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Житель видит своё помещение",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/premises/1",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "resident1@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{residentPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Чужое помещение недоступно",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/premises/1",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "resident2@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{residentPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отключить нового жителя",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/users/{{signupId}}/account",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"enabled\": false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Вход отключённого жителя",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/auth/me",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "security-test@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{signupPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Включить нового жителя",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/users/{{signupId}}/account",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"enabled\": true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Вход после включения",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/auth/me",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "security-test@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{signupPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "1. Бизнес-сценарий и ошибки",
       "item": [
         {
           "name": "Проверить показание воды",
           "request": {
             "method": "POST",
-            "header": [],
-            "url": "{{base}}/api/operations/meter-readings/2/verify"
+            "header": [
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/operations/meter-readings/2/verify",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -53,8 +791,28 @@
           "name": "Повторная проверка запрещена",
           "request": {
             "method": "POST",
-            "header": [],
-            "url": "{{base}}/api/operations/meter-readings/2/verify"
+            "header": [
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/operations/meter-readings/2/verify",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -76,6 +834,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/premises/1/bill",
@@ -87,6 +849,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -106,7 +883,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/utility-charges"
+            "url": "{{base}}/api/utility-charges",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -125,8 +917,28 @@
           "name": "Проверить показание электричества",
           "request": {
             "method": "POST",
-            "header": [],
-            "url": "{{base}}/api/operations/meter-readings/4/verify"
+            "header": [
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/operations/meter-readings/4/verify",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -148,6 +960,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/premises/1/bill",
@@ -159,6 +975,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -182,6 +1013,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/premises/1/bill",
@@ -193,6 +1028,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -215,6 +1065,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/premises/1/transfer",
@@ -226,6 +1080,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -241,24 +1110,43 @@
           ]
         },
         {
-          "name": "Неверная сумма оплаты",
+          "name": "Подмена ownerId в JSON отклоняется",
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/premises/1/pay",
             "body": {
               "mode": "raw",
-              "raw": "{\"period\": \"{{period}}\", \"ownerId\": 1, \"amount\": 1}",
+              "raw": "{\"period\": \"{{period}}\", \"ownerId\": 1, \"amount\": 862.5}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "resident2@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{residentPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -274,24 +1162,43 @@
           ]
         },
         {
-          "name": "Оплата чужим владельцем запрещена",
+          "name": "Неверная сумма оплаты",
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/premises/1/pay",
             "body": {
               "mode": "raw",
-              "raw": "{\"period\": \"{{period}}\", \"ownerId\": 2, \"amount\": 862.5}",
+              "raw": "{\"period\": \"{{period}}\", \"amount\": 1}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "resident1@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{residentPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -300,7 +1207,59 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Чужое помещение оплатить нельзя",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/operations/premises/1/pay",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"period\": \"{{period}}\", \"amount\": 862.5}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "resident2@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{residentPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
                 ]
               }
             }
@@ -314,17 +1273,36 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/premises/1/pay",
             "body": {
               "mode": "raw",
-              "raw": "{\"period\": \"{{period}}\", \"ownerId\": 1, \"amount\": 862.5}",
+              "raw": "{\"period\": \"{{period}}\", \"amount\": 862.5}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "resident1@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{residentPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -347,17 +1325,36 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/premises/1/pay",
             "body": {
               "mode": "raw",
-              "raw": "{\"period\": \"{{period}}\", \"ownerId\": 1, \"amount\": 862.5}",
+              "raw": "{\"period\": \"{{period}}\", \"amount\": 862.5}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "resident1@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{residentPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -380,6 +1377,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/premises/1/transfer",
@@ -391,6 +1392,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -413,6 +1429,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/meters/1/replace",
@@ -424,6 +1444,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -443,7 +1478,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/meters/1"
+            "url": "{{base}}/api/meters/1",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -466,6 +1516,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/meters/1/replace",
@@ -477,6 +1531,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -499,6 +1568,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/operations/meters/1/replace",
@@ -510,6 +1583,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -519,6 +1607,74 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Старый владелец потерял доступ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/premises/1",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "resident1@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{residentPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Новый владелец получил доступ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base}}/api/premises/1",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "resident2@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{residentPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
                 ]
               }
             }
@@ -537,6 +1693,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/users",
@@ -548,6 +1708,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -568,7 +1743,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/users"
+            "url": "{{base}}/api/users",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -587,7 +1777,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/users/{{userId}}"
+            "url": "{{base}}/api/users/{{userId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -609,6 +1814,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/users/{{userId}}",
@@ -620,6 +1829,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -642,6 +1866,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/premises",
@@ -653,6 +1881,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -673,7 +1916,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/premises"
+            "url": "{{base}}/api/premises",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -692,7 +1950,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/premises/{{premiseId}}"
+            "url": "{{base}}/api/premises/{{premiseId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -714,6 +1987,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/premises/{{premiseId}}",
@@ -725,6 +2002,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -747,6 +2039,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/meters",
@@ -758,6 +2054,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -778,7 +2089,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/meters"
+            "url": "{{base}}/api/meters",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -797,7 +2123,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/meters/{{meterId}}"
+            "url": "{{base}}/api/meters/{{meterId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -819,6 +2160,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/meters/{{meterId}}",
@@ -830,6 +2175,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -852,6 +2212,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/meter-readings",
@@ -863,6 +2227,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -883,7 +2262,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/meter-readings"
+            "url": "{{base}}/api/meter-readings",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -902,7 +2296,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/meter-readings/{{readingId}}"
+            "url": "{{base}}/api/meter-readings/{{readingId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -924,6 +2333,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/meter-readings/{{readingId}}",
@@ -935,6 +2348,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -957,6 +2385,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/utility-charges",
@@ -968,6 +2400,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -988,7 +2435,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/utility-charges"
+            "url": "{{base}}/api/utility-charges",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -1007,7 +2469,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/utility-charges/{{chargeId}}"
+            "url": "{{base}}/api/utility-charges/{{chargeId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -1029,6 +2506,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
               }
             ],
             "url": "{{base}}/api/utility-charges/{{chargeId}}",
@@ -1040,6 +2521,21 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -1058,8 +2554,28 @@
           "name": "Удалить utility-charges",
           "request": {
             "method": "DELETE",
-            "header": [],
-            "url": "{{base}}/api/utility-charges/{{chargeId}}"
+            "header": [
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/utility-charges/{{chargeId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -1078,7 +2594,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/utility-charges/{{chargeId}}"
+            "url": "{{base}}/api/utility-charges/{{chargeId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -1096,8 +2627,28 @@
           "name": "Удалить meter-readings",
           "request": {
             "method": "DELETE",
-            "header": [],
-            "url": "{{base}}/api/meter-readings/{{readingId}}"
+            "header": [
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/meter-readings/{{readingId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -1116,7 +2667,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/meter-readings/{{readingId}}"
+            "url": "{{base}}/api/meter-readings/{{readingId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -1134,8 +2700,28 @@
           "name": "Удалить meters",
           "request": {
             "method": "DELETE",
-            "header": [],
-            "url": "{{base}}/api/meters/{{meterId}}"
+            "header": [
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/meters/{{meterId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -1154,7 +2740,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/meters/{{meterId}}"
+            "url": "{{base}}/api/meters/{{meterId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -1172,8 +2773,28 @@
           "name": "Удалить premises",
           "request": {
             "method": "DELETE",
-            "header": [],
-            "url": "{{base}}/api/premises/{{premiseId}}"
+            "header": [
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/premises/{{premiseId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -1192,7 +2813,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/premises/{{premiseId}}"
+            "url": "{{base}}/api/premises/{{premiseId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -1210,8 +2846,28 @@
           "name": "Удалить users",
           "request": {
             "method": "DELETE",
-            "header": [],
-            "url": "{{base}}/api/users/{{userId}}"
+            "header": [
+              {
+                "key": "X-CSRF-TOKEN",
+                "value": "{{csrf}}"
+              }
+            ],
+            "url": "{{base}}/api/users/{{userId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {
@@ -1230,7 +2886,22 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base}}/api/users/{{userId}}"
+            "url": "{{base}}/api/users/{{userId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
           },
           "event": [
             {

@@ -4,26 +4,27 @@ import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import ru.student.lab3.dto.MeterDto;
 import ru.student.lab3.model.*;
 import ru.student.lab3.repository.*;
 import ru.student.lab3.exception.ApiException;
 
 @Service
-@Transactional
+// При ошибке все изменения операции откатываются.
+// SERIALIZABLE не даёт параллельным запросам провести противоречивые изменения.
+@Transactional(isolation = Isolation.SERIALIZABLE)
 public class MeterService {
     private final MeterRepository meterRepository;
     private final PremiseRepository premiseRepository;
     private final MeterReadingRepository meterReadingRepository;
     private final UtilityChargeRepository utilityChargeRepository;
-    private final WriteLock lock;
 
-    public MeterService(MeterRepository meterRepository, PremiseRepository premiseRepository, MeterReadingRepository meterReadingRepository, UtilityChargeRepository utilityChargeRepository, WriteLock lock) {
+    public MeterService(MeterRepository meterRepository, PremiseRepository premiseRepository, MeterReadingRepository meterReadingRepository, UtilityChargeRepository utilityChargeRepository) {
         this.meterRepository = meterRepository;
         this.premiseRepository = premiseRepository;
         this.meterReadingRepository = meterReadingRepository;
         this.utilityChargeRepository = utilityChargeRepository;
-        this.lock = lock;
     }
 
     public List<Meter> getAll() { return meterRepository.findAll(); }
@@ -32,30 +33,21 @@ public class MeterService {
     }
 
     public Meter create(MeterDto.Request request) {
-        {
-            lock.acquire();
             return save(new Meter(meterRepository.nextId(), request.premiseId(), request.resourceType(), request.serialNumber(), request.tariff(), request.status(), Instant.now()));
-        }
     }
 
     public Meter update(Long id, MeterDto.Request request) {
-        {
-            lock.acquire();
             Meter old = getById(id);
-            return save(new Meter(id, Checks.choose(request.premiseId(), old.premiseId()), Checks.choose(request.resourceType(), old.resourceType()), Checks.choose(request.serialNumber(), old.serialNumber()), Checks.choose(request.tariff(), old.tariff()), Checks.choose(request.status(), old.status()), old.createdAt()));
-        }
+        return save(new Meter(id, Checks.choose(request.premiseId(), old.premiseId()), Checks.choose(request.resourceType(), old.resourceType()), Checks.choose(request.serialNumber(), old.serialNumber()), Checks.choose(request.tariff(), old.tariff()), Checks.choose(request.status(), old.status()), old.createdAt()));
     }
 
     public void delete(Long id) {
-        {
-            lock.acquire();
             Meter old = getById(id);
-            if (meterReadingRepository.findAll().stream().anyMatch(r -> r.meterId().equals(id))
-                    || utilityChargeRepository.findAll().stream().anyMatch(c -> c.meterId().equals(id))) {
-                throw ApiException.conflict("Сначала удалите связанные объекты");
-            }
-            meterRepository.deleteById(id);
+        if (meterReadingRepository.findAll().stream().anyMatch(r -> r.meterId().equals(id))
+                || utilityChargeRepository.findAll().stream().anyMatch(c -> c.meterId().equals(id))) {
+            throw ApiException.conflict("Сначала удалите связанные объекты");
         }
+        meterRepository.deleteById(id);
     }
 
     private Meter save(Meter item) {

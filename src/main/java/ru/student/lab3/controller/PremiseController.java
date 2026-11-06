@@ -1,13 +1,18 @@
 package ru.student.lab3.controller;
 
 import java.util.List;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import ru.student.lab3.security.AccountPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 import ru.student.lab3.dto.PremiseDto;
 import ru.student.lab3.model.Premise;
 import ru.student.lab3.service.PremiseService;
 
 @RestController
+@PreAuthorize("hasRole('ADMIN')")
 @RequestMapping("/api/premises")
 public class PremiseController {
     private final PremiseService service;
@@ -22,8 +27,13 @@ public class PremiseController {
     }
 
     @GetMapping("/{id}")
-    public PremiseDto.Response getById(@PathVariable Long id) {
-        return toResponse(service.getById(id));
+    @PreAuthorize("hasAnyRole('ADMIN', 'RESIDENT')")
+    public PremiseDto.Response getById(@PathVariable Long id, @AuthenticationPrincipal AccountPrincipal user) {
+        Premise premise = service.getById(id);
+        if ("RESIDENT".equals(user.getRole()) && premise.ownerId() != user.getUserId()) {
+            throw new AccessDeniedException("Недостаточно прав");
+        }
+        return toResponse(premise);
     }
 
     @PostMapping

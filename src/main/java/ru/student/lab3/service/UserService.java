@@ -4,22 +4,23 @@ import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import ru.student.lab3.dto.UserDto;
 import ru.student.lab3.model.*;
 import ru.student.lab3.repository.*;
 import ru.student.lab3.exception.ApiException;
 
 @Service
-@Transactional
+// При ошибке все изменения операции откатываются.
+// SERIALIZABLE не даёт параллельным запросам провести противоречивые изменения.
+@Transactional(isolation = Isolation.SERIALIZABLE)
 public class UserService {
     private final UserRepository userRepository;
     private final PremiseRepository premiseRepository;
-    private final WriteLock lock;
 
-    public UserService(UserRepository userRepository, PremiseRepository premiseRepository, WriteLock lock) {
+    public UserService(UserRepository userRepository, PremiseRepository premiseRepository) {
         this.userRepository = userRepository;
         this.premiseRepository = premiseRepository;
-        this.lock = lock;
     }
 
     public List<User> getAll() { return userRepository.findAll(); }
@@ -28,29 +29,20 @@ public class UserService {
     }
 
     public User create(UserDto.Request request) {
-        {
-            lock.acquire();
             return save(new User(userRepository.nextId(), request.name(), request.email(), Instant.now()));
-        }
     }
 
     public User update(Long id, UserDto.Request request) {
-        {
-            lock.acquire();
             User old = getById(id);
-            return save(new User(id, Checks.choose(request.name(), old.name()), Checks.choose(request.email(), old.email()), old.createdAt()));
-        }
+        return save(new User(id, Checks.choose(request.name(), old.name()), Checks.choose(request.email(), old.email()), old.createdAt()));
     }
 
     public void delete(Long id) {
-        {
-            lock.acquire();
             User old = getById(id);
-            if (premiseRepository.findAll().stream().anyMatch(p -> p.ownerId().equals(id))) {
-                throw ApiException.conflict("Сначала удалите связанные объекты");
-            }
-            userRepository.deleteById(id);
+        if (premiseRepository.findAll().stream().anyMatch(p -> p.ownerId().equals(id))) {
+            throw ApiException.conflict("Сначала удалите связанные объекты");
         }
+        userRepository.deleteById(id);
     }
 
     private User save(User item) {
